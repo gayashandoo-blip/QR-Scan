@@ -2,6 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<script>
+/* Offline-first: this page always opens from the bundled local copy first (no network needed).
+   If online, it quietly checks GitHub for a newer version in the background and swaps it in
+   seamlessly - no error screens, no blocking. */
+(function(){
+  try{
+    if(sessionStorage.getItem('qr_synced'))return;
+    sessionStorage.setItem('qr_synced','1');
+    if(!navigator.onLine)return;
+    var src='https://raw.githubusercontent.com/gayashandoo-blip/QR-Scan/main/index.html?t='+Date.now();
+    fetch(src,{cache:'no-store'})
+      .then(function(r){if(!r.ok)throw 0;return r.text()})
+      .then(function(html){
+        if(html&&html.indexOf('<!DOCTYPE html>')===0){
+          document.open();document.write(html);document.close();
+        }
+      })
+      .catch(function(){/* offline or fetch failed: continue with the bundled local copy, no error shown */});
+  }catch(e){}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>QR Scan</title>
 <style>
@@ -19,7 +40,8 @@ header h1{font-size:20px;margin:0}
 .icon{width:42px;height:42px;padding:0;background:var(--card);color:var(--tx);border:1px solid var(--bd);font-size:20px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px}
 .row{display:flex;justify-content:space-between;font-size:14px;color:var(--mu)}
-input[type=text]{width:100%;font-size:22px;letter-spacing:2px;text-align:center;padding:14px 8px;border-radius:12px;border:2px solid var(--bd);background:transparent;color:var(--tx);font-variant-numeric:tabular-nums}
+input[type=text]{width:100%;font-size:22px;letter-spacing:2px;text-align:center;padding:14px 8px;border-radius:12px;border:2px solid var(--bd);background:transparent;color:#0b2545;font-weight:800;font-variant-numeric:tabular-nums}
+:root:not([data-theme="light"]) input[type=text]{color:#fff}
 input.ok{border-color:var(--ok)}
 button{font-size:16px;font-weight:600;border:0;border-radius:12px;padding:14px;cursor:pointer;color:#fff;background:var(--pr)}
 button.send{background:var(--ok);font-size:18px;padding:16px}
@@ -53,6 +75,20 @@ select{font-size:15px;padding:8px;border-radius:8px;background:transparent;color
 #gs{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:50;padding:16px}
 #gs.on{display:flex}
 #gs .box{background:var(--card);border-radius:16px;padding:18px;width:100%;max-width:400px;display:flex;flex-direction:column;gap:10px;border:1px solid var(--bd)}
+#hs{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:50;padding:16px}
+#hs.on{display:flex}
+#hs .box{background:var(--card);border-radius:16px;padding:16px;width:100%;max-width:440px;max-height:82vh;display:flex;flex-direction:column;gap:10px;border:1px solid var(--bd)}
+#hs h2{margin:0;font-size:18px}
+#hs .tabs{display:flex;gap:8px}
+#hs .tab{flex:1;padding:8px;border-radius:10px;border:1px solid var(--bd);background:transparent;color:var(--tx);font-size:13px;font-weight:600}
+#hs .tab.on{background:var(--pr);color:#fff;border-color:var(--pr)}
+#hs .list{overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px;min-height:120px}
+#hs .row2{border:1px solid var(--bd);border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.5}
+#hs .row2 b{font-size:13px}
+#hs .empty{text-align:center;color:var(--mu);font-size:13px;padding:20px 0}
+#hs .tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:4px}
+#hs .tag.pend{background:#ffb30033;color:#b86a00}
+#hs .tag.sent{background:#12a15033;color:#0d7a3c}
 #log{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(5,8,14,.92);z-index:60;padding:16px}
 #log.off{display:none}
 #log .box{background:var(--card);border-radius:16px;padding:20px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px;border:1px solid var(--bd)}
@@ -79,14 +115,14 @@ select{font-size:15px;padding:8px;border-radius:8px;background:transparent;color
 <div id="opRow"><span>Logged in: <strong id="opEmail">—</strong></span><button id="opSwitch">Switch</button></div>
 
 <div class="card">
-  <div class="row"><label for="a1">Area</label><span id="c1">0/12</span></div>
-  <input type="text" id="a1" inputmode="numeric" maxlength="12" placeholder="000000000000" autocomplete="off">
+  <div class="row"><label for="a1">Area</label><span id="c1">0/10</span></div>
+  <input type="text" id="a1" inputmode="numeric" maxlength="10" placeholder="0000000000" autocomplete="off">
   <button data-scan="a1">📷 Scan QR</button>
 </div>
 
 <div class="card">
-  <div class="row"><label for="a2">Bulk/CSC</label><span id="c2">0/12</span></div>
-  <input type="text" id="a2" inputmode="numeric" maxlength="12" placeholder="000000000000" autocomplete="off">
+  <div class="row"><label for="a2">Bulk/CSC</label><span id="c2">0/10</span></div>
+  <input type="text" id="a2" inputmode="numeric" maxlength="10" placeholder="0000000000" autocomplete="off">
   <button data-scan="a2">📷 Scan QR</button>
 </div>
 
@@ -133,6 +169,7 @@ select{font-size:15px;padding:8px;border-radius:8px;background:transparent;color
     <div class="set"><span>Vibrate on scan</span><input type="checkbox" id="sVib"></div>
     <button class="sec" id="sLog">👤 Switch logger (Gmail)</button>
     <button class="sec" id="sGs">🔗 Google Sheet link</button>
+    <button class="sec" id="sHist">📜 History</button>
     <button class="sec" id="sClear">Clear both fields</button>
     <button id="sDone">Done</button>
   </div>
@@ -149,6 +186,19 @@ select{font-size:15px;padding:8px;border-radius:8px;background:transparent;color
     <a id="gsOpen" href="#" target="_blank" rel="noopener" hidden>Open Google Sheet</a>
     <button id="gsSave">Save</button>
     <button class="sec" id="gsCancel">Cancel</button>
+  </div>
+</div>
+
+<div id="hs">
+  <div class="box">
+    <h2>History</h2>
+    <div class="tabs">
+      <button class="tab on" id="hsTabPend">Pending</button>
+      <button class="tab" id="hsTabSent">Sent</button>
+    </div>
+    <div class="list" id="hsList"></div>
+    <button class="sec" id="hsClear">Clear sent history</button>
+    <button id="hsDone">Close</button>
   </div>
 </div>
 
@@ -214,14 +264,14 @@ tick();setInterval(tick,1000);
 
 function setMsg(t,bad){$('msg').style.color=bad?'var(--er)':'var(--ok)';$('msg').textContent=t}
 function check(touch){
-  var ok1=/^\d{12}$/.test($('a1').value),ok2=/^\d{12}$/.test($('a2').value);
+  var ok1=/^\d{10}$/.test($('a1').value),ok2=/^\d{10}$/.test($('a2').value);
   $('a1').classList.toggle('ok',ok1);$('a2').classList.toggle('ok',ok2);
-  $('c1').textContent=$('a1').value.length+'/12';$('c2').textContent=$('a2').value.length+'/12';
+  $('c1').textContent=$('a1').value.length+'/10';$('c2').textContent=$('a2').value.length+'/10';
   $('send').disabled=!(ok1&&ok2);
   if(touch){lastUpd=new Date();tick()}
 }
 ['a1','a2'].forEach(function(id){
-  $(id).addEventListener('input',function(){this.value=this.value.replace(/\D/g,'').slice(0,12);setMsg('');check(true)});
+  $(id).addEventListener('input',function(){this.value=this.value.replace(/\D/g,'').slice(0,10);setMsg('');check(true)});
 });
 
 /* scanner */
@@ -251,12 +301,12 @@ async function loop(){
   }
   if(text){
     var num=text.replace(/\D/g,'');
-    if(/^\d{12}$/.test(num)){
+    if(/^\d{10}$/.test(num)){
       $(target).value=num;stop();check(true);
       if(cfg.vib&&navigator.vibrate)navigator.vibrate(120);
       return;
     }
-    $('hint').textContent='Not a 12-digit account number. Try again.';
+    $('hint').textContent='Not a 10-digit account number. Try again.';
   }
   raf=requestAnimationFrame(loop);
 }
@@ -284,12 +334,12 @@ $('file').onchange=function(){
     var t=String(r.result),a=null,b=null;
     try{var j=JSON.parse(t);
       a=String(j.area||j.Area||'').replace(/\D/g,'');b=String(j.bulk||j.Bulk||j['Bulk/CSC']||j.bulk_csc||'').replace(/\D/g,'')}catch(e){}
-    if(!/^\d{12}$/.test(a||'')||!/^\d{12}$/.test(b||'')){
-      var m=t.match(/\d{12}/g)||[];a=m[0]||'';b=m[1]||'';
+    if(!/^\d{10}$/.test(a||'')||!/^\d{10}$/.test(b||'')){
+      var m=t.match(/\d{10}/g)||[];a=m[0]||'';b=m[1]||'';
     }
     var n=0;
-    if(/^\d{12}$/.test(a)){$('a1').value=a;n++}
-    if(/^\d{12}$/.test(b)){$('a2').value=b;n++}
+    if(/^\d{10}$/.test(a)){$('a1').value=a;n++}
+    if(/^\d{10}$/.test(b)){$('a2').value=b;n++}
     check(true);
     n?setMsg('Imported '+n+' value'+(n>1?'s':'')+' from '+f.name+'.'):setMsg('No 12-digit account numbers found in the file.',true);
   };
@@ -331,14 +381,20 @@ $('logSetup').onclick=function(){
   $('gsLink').value=cfg.sheetUrl||'';$('gsScript').value=cfg.scriptUrl||'';showOpen();$('gs').classList.add('on');
 };
 
-/* send (queued, retried when back online) */
+/* send (queued, retried when back online) + history (pending/sent) */
 function getQ(){try{return JSON.parse(localStorage.getItem('qrq')||'[]')}catch(e){return[]}}
 function setQ(q){try{localStorage.setItem('qrq',JSON.stringify(q))}catch(e){}}
+function getSent(){try{return JSON.parse(localStorage.getItem('qrsent')||'[]')}catch(e){return[]}}
+function setSent(s){try{if(s.length>300)s=s.slice(0,300);localStorage.setItem('qrsent',JSON.stringify(s))}catch(e){}}
+function addSent(entry){var s=getSent();s.unshift(entry);setSent(s)}
 var busy=false;
 async function flush(){
   if(busy||!cfg.scriptUrl)return;busy=true;var q=getQ(),sent=0;
   while(q.length){
-    try{await fetch(cfg.scriptUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(q[0])});q.shift();setQ(q);sent++}
+    try{
+      await fetch(cfg.scriptUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(q[0])});
+      addSent(q[0]);q.shift();setQ(q);sent++;
+    }
     catch(e){break}
   }
   busy=false;
@@ -346,6 +402,7 @@ async function flush(){
   else if(sent)setMsg('Sent to Google Sheet.');
 }
 window.addEventListener('online',flush);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')flush()});
 $('send').onclick=async function(){
   if(!cfg.scriptUrl){setMsg('Add your Google Sheet link in Settings first.',true);return}
   if(!curOp()){showLogger();return}
@@ -354,6 +411,25 @@ $('send').onclick=async function(){
   await flush();
 };
 flush();
+
+/* history modal */
+var hsTab='pend';
+function fmtHist(d){try{return new Date(d).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}catch(e){return d}}
+function renderHist(){
+  var list=$('hsList'),data=hsTab==='pend'?getQ():getSent();
+  $('hsTabPend').classList.toggle('on',hsTab==='pend');
+  $('hsTabSent').classList.toggle('on',hsTab==='sent');
+  if(!data.length){list.innerHTML='<div class="empty">'+(hsTab==='pend'?'No pending entries. Everything is sent.':'No sent entries yet.')+'</div>';return}
+  list.innerHTML=data.map(function(e){
+    var tag=hsTab==='pend'?'<span class="tag pend">PENDING</span>':'<span class="tag sent">SENT</span>';
+    return '<div class="row2"><b>'+(e.email||'—')+'</b>'+tag+'<br>Area: '+e.area+' &middot; Bulk/CSC: '+e.bulk+'<br>'+fmtHist(e.time)+'</div>';
+  }).join('');
+}
+$('sHist').onclick=function(){drawer(false);$('sheet').classList.remove('on');hsTab='pend';renderHist();$('hs').classList.add('on')};
+$('hsTabPend').onclick=function(){hsTab='pend';renderHist()};
+$('hsTabSent').onclick=function(){hsTab='sent';renderHist()};
+$('hsDone').onclick=function(){$('hs').classList.remove('on')};
+$('hsClear').onclick=function(){setSent([]);renderHist()};
 check(false);
 </script>
 </body>
