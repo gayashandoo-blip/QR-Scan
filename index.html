@@ -113,11 +113,17 @@ select{font-size:15px;padding:8px;border-radius:8px;background:transparent;color
   <div class="box">
     <h2>Who is working?</h2>
     <div id="logStep1">
-      <div class="small">Enter your Gmail to log in.</div>
+      <div class="small">Enter your Gmail. We'll send a 6-digit code to it to verify it's really you.</div>
       <select id="logSelect"><option value="">+ New Gmail</option></select>
       <input type="text" id="logNew" placeholder="yourname@gmail.com" autocomplete="off" style="margin-top:8px">
-      <button id="logSend" style="margin-top:8px">Log in</button>
+      <button id="logSend" style="margin-top:8px">Send code</button>
       <div class="small" id="logErr1" style="color:var(--er);min-height:16px"></div>
+
+      <label for="logCode" class="small" style="display:block;margin-top:6px">Code sent to your Gmail</label>
+      <input type="text" id="logCode" placeholder="Enter code here" inputmode="numeric" maxlength="6" disabled style="margin-top:4px;text-align:center;letter-spacing:4px;font-size:20px">
+      <button id="logVerify" style="margin-top:8px" disabled>Verify &amp; log in</button>
+      <div class="small" id="logErr2" style="color:var(--er);min-height:16px"></div>
+      <button class="sec" id="logResend" hidden>Resend code</button>
 
       <button class="sec" id="logSetup" style="margin-top:4px">⚙️ First-time setup (connect Google Sheet)</button>
     </div>
@@ -162,7 +168,7 @@ select{font-size:15px;padding:8px;border-radius:8px;background:transparent;color
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script>
 var $=function(i){return document.getElementById(i)};
-var stream=null,target=null,raf=0,det=null,cfg={theme:'auto',h24:true,vib:true,scriptUrl:'https://script.google.com/macros/s/AKfycbwa-kUXpLCi7SmQ5L1iLySeECxQ9nPyjB17-jZYTkzTi6O189Zd4rXQrrdTa0AsofUz/exec'};
+var stream=null,target=null,raf=0,det=null,cfg={theme:'auto',h24:true,vib:true};
 try{var s=JSON.parse(localStorage.getItem('qrcfg')||'{}');for(var k in s)cfg[k]=s[k]}catch(e){}
 function saveCfg(){try{localStorage.setItem('qrcfg',JSON.stringify(cfg))}catch(e){}}
 function applyTheme(){
@@ -182,19 +188,71 @@ function fillOpSelect(){
   sel.innerHTML='<option value="">+ New Gmail</option>';
   ops.forEach(function(o){var op=document.createElement('option');op.value=o;op.textContent=o;sel.appendChild(op)});
 }
+var pendingEmail='';
 function showLogger(){
-  fillOpSelect();$('logNew').value='';
-  $('logErr1').textContent='';$('logErr1').style.color='var(--er)';
+  fillOpSelect();$('logNew').value='';$('logCode').value='';
+  $('logErr1').textContent='';$('logErr1').style.color='var(--er)';$('logErr2').textContent='';
+  $('logCode').disabled=true;$('logVerify').disabled=true;$('logResend').hidden=true;
   $('log').classList.remove('off');
 }
 function setOperatorBadge(){$('opEmail').textContent=curOp()||'—'}
 $('logSelect').onchange=function(){if(this.value)$('logNew').value=this.value};
-$('logSend').onclick=function(){
+async function otpCall(action,email,code){
+  if(!cfg.scriptUrl)throw {msg:'Ask the admin to connect the Google Sheet (Settings) before logging in.'};
+  var res;
+  try{
+    res=await fetch(cfg.scriptUrl,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:action,email:email,code:code})});
+  }catch(e){
+    throw {msg:'Could not reach the Google Sheet server. Check your internet connection, or that this page is not blocked from making outside requests.'};
+  }
+  var txt=await res.text();
+  var data=null;
+  try{data=JSON.parse(txt)}catch(e){
+    throw {msg:'The Apps Script did not return a valid response. In Apps Script, go to Deploy \u2192 Manage deployments \u2192 Edit \u2192 Version: New version \u2192 Deploy, then try again.'};
+  }
+  return data;
+}
+$('logSend').onclick=async function(){
   var v=($('logNew').value||'').trim().toLowerCase();
   $('logErr1').style.color='var(--er)';$('logErr1').textContent='';
   if(!/^[a-z0-9._%+-]+@gmail\.com$/.test(v)){$('logErr1').textContent='Enter a valid @gmail.com address.';return}
-  var ops=getOps();if(ops.indexOf(v)===-1){ops.push(v);setOps(ops)}
-  setCurOp(v);setOperatorBadge();$('log').classList.add('off');
+  $('logSend').disabled=true;$('logSend').textContent='Sending...';
+  try{
+    var r=await otpCall('request_otp',v);
+    if(r&&r.ok){
+      pendingEmail=v;
+      $('logCode').disabled=false;$('logVerify').disabled=false;$('logResend').hidden=false;
+      $('logCode').value='';$('logCode').focus();
+      $('logErr1').style.color='var(--ok)';$('logErr1').textContent='Code sent to '+v+'. Enter it below.';
+    }else{
+      $('logErr1').textContent='Could not send code. Check the Gmail address and try again.';
+    }
+  }catch(e){$('logErr1').textContent=(e&&e.msg)||'Could not reach the server. Check your internet connection.'}
+  $('logSend').disabled=false;$('logSend').textContent='Send code';
+};
+$('logResend').onclick=async function(){
+  $('logErr2').textContent='';$('logResend').disabled=true;$('logResend').textContent='Resending...';
+  try{
+    var r=await otpCall('request_otp',pendingEmail);
+    $('logErr2').textContent=(r&&r.ok)?'A new code was sent.':'Could not resend. Try again.';
+  }catch(e){$('logErr2').textContent=(e&&e.msg)||'Could not reach the server.'}
+  $('logResend').disabled=false;$('logResend').textContent='Resend code';
+};
+$('logVerify').onclick=async function(){
+  var code=($('logCode').value||'').trim();
+  $('logErr2').textContent='';
+  if(!/^\d{6}$/.test(code)){$('logErr2').textContent='Enter the 6-digit code.';return}
+  $('logVerify').disabled=true;$('logVerify').textContent='Verifying...';
+  try{
+    var r=await otpCall('verify_otp',pendingEmail,code);
+    if(r&&r.ok){
+      var ops=getOps();if(ops.indexOf(pendingEmail)===-1){ops.push(pendingEmail);setOps(ops)}
+      setCurOp(pendingEmail);setOperatorBadge();$('log').classList.add('off');
+    }else{
+      $('logErr2').textContent='Incorrect or expired code. Try again or resend.';
+    }
+  }catch(e){$('logErr2').textContent=(e&&e.msg)||'Could not reach the server.'}
+  $('logVerify').disabled=false;$('logVerify').textContent='Verify & log in';
 };
 $('opSwitch').onclick=function(){setCurOp('');showLogger()};
 function setMsgEarly(t){var m=$('msg');if(m){m.style.color='var(--er)';m.textContent=t}}
