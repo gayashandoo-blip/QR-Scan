@@ -2,27 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<script>
-/* Offline-first: this page always opens from the bundled local copy first (no network needed).
-   If online, it quietly checks GitHub for a newer version in the background and swaps it in
-   seamlessly - no error screens, no blocking. */
-(function(){
-  try{
-    if(sessionStorage.getItem('qr_synced'))return;
-    sessionStorage.setItem('qr_synced','1');
-    if(!navigator.onLine)return;
-    var src='https://raw.githubusercontent.com/gayashandoo-blip/QR-Scan/main/index.html?t='+Date.now();
-    fetch(src,{cache:'no-store'})
-      .then(function(r){if(!r.ok)throw 0;return r.text()})
-      .then(function(html){
-        if(html&&html.indexOf('<!DOCTYPE html>')===0){
-          document.open();document.write(html);document.close();
-        }
-      })
-      .catch(function(){/* offline or fetch failed: continue with the bundled local copy, no error shown */});
-  }catch(e){}
-})();
-</script>
+<!-- Local bundled version is used directly; no remote page replacement. -->
+
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>QR Scan</title>
 <style>
@@ -56,7 +37,10 @@ footer{text-align:center;border-top:1px solid var(--bd);padding-top:10px;line-he
 #ov{position:fixed;inset:0;background:#000;display:none;flex-direction:column;z-index:30}
 #ov.on{display:flex}
 video{flex:1;width:100%;object-fit:cover;min-height:0}
-.frame{position:absolute;left:50%;top:42%;width:62vmin;height:62vmin;transform:translate(-50%,-50%);border:3px solid #fff;border-radius:18px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45);pointer-events:none}
+.frame{position:absolute;left:50%;top:42%;width:62vmin;height:62vmin;transform:translate(-50%,-50%);border:3px solid #fff;border-radius:18px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45);pointer-events:none;overflow:hidden}
+.frame::after{content:"";position:absolute;left:5%;right:5%;top:8%;height:3px;border-radius:3px;background:linear-gradient(90deg,transparent,#51f5ff 18%,#fff 50%,#51f5ff 82%,transparent);box-shadow:0 0 8px #37eaff,0 0 18px rgba(55,234,255,.85);animation:qr-scan-line 1.8s ease-in-out infinite alternate}
+@keyframes qr-scan-line{from{top:8%;opacity:.72}to{top:91%;opacity:1}}
+@media(prefers-reduced-motion:reduce){.frame::after{animation-duration:3.5s}}
 #hint{position:absolute;left:0;right:0;bottom:90px;text-align:center;color:#fff;font-size:15px;padding:0 16px}
 #close{position:absolute;left:16px;right:16px;bottom:calc(20px + env(safe-area-inset-bottom,0px));background:#333}
 #scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .25s;z-index:10}
@@ -209,7 +193,7 @@ select{font-size:15px;padding:8px;border-radius:8px;background:transparent;color
   <button id="close">Close</button>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js'"></script>
 <script>
 var $=function(i){return document.getElementById(i)};
 var stream=null,target=null,raf=0,det=null,cfg={theme:'auto',h24:true,vib:true,scriptUrl:'https://script.google.com/macros/s/AKfycbwa-kUXpLCi7SmQ5L1iLySeECxQ9nPyjB17-jZYTkzTi6O189Zd4rXQrrdTa0AsofUz/exec'};
@@ -274,41 +258,101 @@ function check(touch){
   $(id).addEventListener('input',function(){this.value=this.value.replace(/\D/g,'').slice(0,10);setMsg('');check(true)});
 });
 
-/* scanner */
-document.querySelectorAll('[data-scan]').forEach(function(b){b.onclick=function(){scan(b.dataset.scan)}});
+/* QR scanner */
+document.querySelectorAll('[data-scan]').forEach(function(b){
+  b.onclick=function(){scan(b.dataset.scan)};
+});
 var v=$('v'),cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});
+var lastDecodeAt=0,decoderMessageShown=false;
+
 async function scan(id){
-  target=id;$('hint').textContent='Point the camera at the QR code';setMsg('');
-  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false})}
-  catch(e){setMsg('Please allow camera access.',true);return}
-  v.srcObject=stream;await v.play();$('ov').classList.add('on');loop();
+  target=id;
+  $('hint').textContent='Point the camera at the QR code';
+  setMsg('');
+  if(stream)stop();
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    setMsg('Camera is not available. Open this app using HTTPS or allow camera access in Android settings.',true);
+    return;
+  }
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}
+    });
+    v.autoplay=true;
+    v.muted=true;
+    v.playsInline=true;
+    v.srcObject=stream;
+    $('ov').classList.add('on');
+    await v.play();
+    lastDecodeAt=0;
+    decoderMessageShown=false;
+    raf=requestAnimationFrame(loop);
+  }catch(e){
+    stop();
+    setMsg('Camera could not start. Check camera permission and try again.',true);
+  }
 }
+
 function stop(){
   cancelAnimationFrame(raf);
-  if(stream){stream.getTracks().forEach(function(t){t.stop()});stream=null}
-  v.srcObject=null;$('ov').classList.remove('on');
+  if(stream){stream.getTracks().forEach(function(t){t.stop()});stream=null;}
+  v.pause();
+  v.srcObject=null;
+  $('ov').classList.remove('on');
 }
 $('close').onclick=stop;
+
 async function loop(){
   if(!stream)return;
+  var now=Date.now();
+  // Decode at a steady rate instead of trying to process every camera frame.
+  if(now-lastDecodeAt<90){raf=requestAnimationFrame(loop);return;}
+  lastDecodeAt=now;
   var text=null;
-  if(v.readyState>=2&&v.videoWidth){
+  if(v.readyState>=2&&v.videoWidth&&v.videoHeight){
     try{
-      if(det){var r=await det.detect(v);if(r.length)text=r[0].rawValue}
-      else{cv.width=v.videoWidth;cv.height=v.videoHeight;cx.drawImage(v,0,0);
-        var d=cx.getImageData(0,0,cv.width,cv.height),q=jsQR(d.data,d.width,d.height);if(q)text=q.data}
-    }catch(e){}
+      // Prefer jsQR when available. BarcodeDetector is used only as a fallback;
+      // some Android WebViews expose it but fail to decode QR frames reliably.
+      if(typeof window.jsQR==='function'){
+        var rect=v.getBoundingClientRect();
+        var coverScale=Math.max(rect.width/v.videoWidth,rect.height/v.videoHeight);
+        var cssCrop=Math.min(rect.width,rect.height)*0.62*0.96;
+        var cropSize=Math.min(v.videoWidth,v.videoHeight,cssCrop/(coverScale||1));
+        var sx=(v.videoWidth-cropSize)/2;
+        var sy=(v.videoHeight-cropSize)/2;
+        cv.width=640;
+        cv.height=640;
+        cx.drawImage(v,sx,sy,cropSize,cropSize,0,0,640,640);
+        var pixels=cx.getImageData(0,0,640,640);
+        var code=window.jsQR(pixels.data,pixels.width,pixels.height,{inversionAttempts:'attemptBoth'});
+        if(code)text=code.data;
+      }else if(det){
+        var results=await det.detect(v);
+        if(results&&results.length)text=results[0].rawValue;
+      }else if(!decoderMessageShown){
+        $('hint').textContent='QR decoder is not loaded. Connect to the internet and reopen the scanner.';
+        decoderMessageShown=true;
+      }
+    }catch(e){
+      if(!decoderMessageShown){
+        $('hint').textContent='Unable to read this camera frame. Keep the QR code inside the box.';
+        decoderMessageShown=true;
+      }
+    }
   }
   if(text){
-    var num=text.replace(/\D/g,'');
+    var num=String(text).replace(/\D/g,'');
     if(/^\d{10}$/.test(num)){
-      $(target).value=num;stop();check(true);
+      $(target).value=num;
+      stop();
+      check(true);
       if(cfg.vib&&navigator.vibrate)navigator.vibrate(120);
       return;
     }
-    $('hint').textContent='Not a 10-digit account number. Try again.';
+    $('hint').textContent='QR found, but it does not contain a 10-digit account number. Try again.';
   }
-  raf=requestAnimationFrame(loop);
+  if(stream)raf=requestAnimationFrame(loop);
 }
 
 /* drawer */
