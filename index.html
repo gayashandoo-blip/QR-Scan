@@ -214,6 +214,9 @@ function getOps(){try{return JSON.parse(localStorage.getItem('qrops')||'[]')}cat
 function setOps(a){try{localStorage.setItem('qrops',JSON.stringify(a))}catch(e){}}
 function curOp(){try{return sessionStorage.getItem('qrcur')||''}catch(e){return''}}
 function setCurOp(e){try{sessionStorage.setItem('qrcur',e)}catch(e){}}
+/* Always begin a fresh app session when this HTML page is loaded.
+   The saved Gmail list, settings, and send history remain in localStorage. */
+try{sessionStorage.removeItem('qrcur')}catch(e){}
 function fillOpSelect(){
   var sel=$('logSelect'),ops=getOps();
   sel.innerHTML='<option value="">+ New Gmail</option>';
@@ -478,6 +481,46 @@ $('hsTabSent').onclick=function(){hsTab='sent';renderHist()};
 $('hsDone').onclick=function(){$('hs').classList.remove('on')};
 $('hsClear').onclick=function(){setSent([]);renderHist()};
 check(false);
+
+/* Start/restart cleanly, both online and offline. This resets only temporary
+   screen state; saved settings, remembered Gmail addresses, and queued/sent
+   history are intentionally preserved. */
+function resetToStart(){
+  if(stream)stop();
+  else{
+    try{v.pause();v.srcObject=null}catch(e){}
+    $('ov').classList.remove('on');
+  }
+  drawer(false);
+  $('sheet').classList.remove('on');
+  $('gs').classList.remove('on');
+  $('hs').classList.remove('on');
+  $('a1').value='';
+  $('a2').value='';
+  $('file').value='';
+  $('msg').textContent='';
+  $('logNew').value='';
+  $('logSelect').value='';
+  $('logErr1').textContent='';
+  setCurOp('');
+  setOperatorBadge();
+  check(false);
+  showLogger();
+}
+
+/* Cold start: show the first step (Gmail logger) after every page load. */
+resetToStart();
+
+/* If the WebView restores this page from its back/forward cache, reset it too. */
+window.addEventListener('pageshow',function(e){
+  if(e.persisted)resetToStart();
+});
+
+/* Stop camera and clear this temporary login session when the page is closed. */
+window.addEventListener('pagehide',function(){
+  if(stream)stop();
+  try{sessionStorage.removeItem('qrcur')}catch(e){}
+});
 </script>
 </body>
 </html>
